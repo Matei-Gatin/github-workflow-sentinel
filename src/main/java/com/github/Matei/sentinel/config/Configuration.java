@@ -19,6 +19,11 @@ public class Configuration
 
     public Configuration(String repository, String token)
     {
+        if (repository == null || !repository.contains("/"))
+        {
+            throw new IllegalArgumentException("Repository must be in format 'owner/repo'");
+        }
+
         this.repository = repository;
         this.token = token;
 

@@ -1,10 +1,12 @@
 package com.github.Matei.sentinel.model;
 
+import java.time.Instant;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+
 import lombok.Getter;
 import lombok.ToString;
-
-import java.time.Instant;
-import java.util.Objects;
 
 /**
  * Represents a job within a GitHub Actions workflow run.
@@ -25,9 +27,11 @@ public class Job
     private final String conclusion;
     private final Instant startedAt;
     private final Instant completedAt;
+    // Steps within this job (populated when fetching job details)
+    private final List<Step> steps;
 
     public Job(long id, long runId, String name, String status, String conclusion,
-               Instant startedAt, Instant completedAt)
+               Instant startedAt, Instant completedAt, List<Step> steps)
     {
         this.id = id;
         this.runId = runId;
@@ -36,6 +40,7 @@ public class Job
         this.conclusion = conclusion;
         this.startedAt = startedAt;
         this.completedAt = completedAt;
+        this.steps = steps != null ? steps : Collections.emptyList();
     }
 
     @Override

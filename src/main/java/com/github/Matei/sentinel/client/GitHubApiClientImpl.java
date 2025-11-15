@@ -1,6 +1,7 @@
 package com.github.Matei.sentinel.client;
 
 import com.github.Matei.sentinel.model.Job;
+import com.github.Matei.sentinel.model.Step;
 import com.github.Matei.sentinel.model.WorkflowRun;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -51,7 +52,7 @@ public class GitHubApiClientImpl implements GitHubApiClient
         String responseBody = makeRequest(url);
 
         JsonObject json = gson.fromJson(responseBody, JsonObject.class);
-        JsonArray workflowRuns = json.getAsJsonArray("workflow-runs");
+        JsonArray workflowRuns = json.getAsJsonArray("workflow_runs");
 
         List<WorkflowRun> result = new ArrayList<>();
 
@@ -71,7 +72,7 @@ public class GitHubApiClientImpl implements GitHubApiClient
 
             Instant updatedAt = Instant.parse(runJson.get("updated_at").getAsString());
             Instant concludedAt = runJson.has("run_finished_at") && !runJson.get("run_finished_at").isJsonNull()
-                    ? Instant.parse(runJson.get("run_finished").getAsString())
+                    ? Instant.parse(runJson.get("run_finished_at").getAsString())
                     : null;
 
             if (since != null && updatedAt.isBefore(since))
@@ -118,11 +119,39 @@ public class GitHubApiClientImpl implements GitHubApiClient
             Instant startedAt = jobJson.has("started_at") && !jobJson.get("started_at").isJsonNull()
                     ? Instant.parse(jobJson.get("started_at").getAsString())
                     : null;
-            Instant completedAt = jobJson.has("completed_at") && jobJson.get("completed_at").isJsonNull()
+            Instant completedAt = jobJson.has("completed_at") && !jobJson.get("completed_at").isJsonNull()
                     ? Instant.parse(jobJson.get("completed_at").getAsString())
                     : null;
 
-            Job job = new Job(id, jobRunId, name, status, conclusion, startedAt, completedAt);
+            // Parse steps from the job JSON
+            List<Step> steps = new ArrayList<>();
+            if (jobJson.has("steps") && !jobJson.get("steps").isJsonNull())
+            {
+                JsonArray stepsArray = jobJson.getAsJsonArray("steps");
+
+                for (int j = 0; j < stepsArray.size(); j++)
+                {
+                    JsonObject stepJson = stepsArray.get(j).getAsJsonObject();
+
+                    String stepName = stepJson.get("name").getAsString();
+                    String stepStatus = stepJson.get("status").getAsString();
+                    String stepConclusion = stepJson.has("conclusion") && !stepJson.get("conclusion").isJsonNull()
+                            ? stepJson.get("conclusion").getAsString()
+                            : null;
+
+                    Instant stepsStartedAt = stepJson.has("started_at") && !stepJson.get("started_at").isJsonNull()
+                            ? Instant.parse(stepJson.get("started_at").getAsString())
+                            : null;
+                    Instant stepCompletedAt = stepJson.has("completed_at") && !stepJson.get("completed_at").isJsonNull()
+                            ? Instant.parse(stepJson.get("completed_at").getAsString())
+                            : null;
+
+                    Step step = new Step(stepName, stepStatus, stepConclusion, stepsStartedAt, stepCompletedAt);
+                    steps.add(step);
+                }
+            }
+
+            Job job = new Job(id, jobRunId, name, status, conclusion, startedAt, completedAt, steps);
             result.add(job);
         }
 
