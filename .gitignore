@@ -30,6 +30,8 @@ dependency-reduced-pom.xml
 
 # VS Code
 .vscode/
+.github/
+./project_description.txt
 
 # Eclipse
 .classpath
