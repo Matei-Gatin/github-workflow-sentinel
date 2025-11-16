@@ -4,7 +4,6 @@ import com.github.matei.sentinel.model.MonitoringEvent;
 import com.github.matei.sentinel.util.Constants;
 
 import java.time.Duration;
-import java.time.format.DateTimeFormatter;
 
 /**
  * Console implementation of EventFormatter.

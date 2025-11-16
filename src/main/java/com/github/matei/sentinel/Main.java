@@ -12,6 +12,9 @@ import com.github.matei.sentinel.persistence.FileStateManager;
 import com.github.matei.sentinel.persistence.StateManager;
 import com.github.matei.sentinel.util.Constants;
 
+/**
+ * Entry point of the program
+ */
 public class Main {
     public static void main(String[] args) {
         if (args.length < Constants.MIN_ARGS_COUNT)

@@ -54,6 +54,13 @@
                 </configuration>
             </plugin>
 
+            <!-- Maven Surefire Plugin: For running JUnit 5 tests -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.0.0-M9</version>
+            </plugin>
+
             <!-- Maven Assembly Plugin: Creates a "fat JAR" with all dependencies included -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

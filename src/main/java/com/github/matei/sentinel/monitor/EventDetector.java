@@ -8,8 +8,97 @@ import java.time.Instant;
 import java.util.*;
 
 /**
- * Detects new/changed events by comparing current workflow state with previous state.
- * This is where the magic happens - figuring out what changed and generating MonitoringEvents.
+ * Detects state changes in GitHub workflows, jobs, and steps to generate monitoring events.
+ * <p>
+ * This class is the core of the event detection logic. It maintains the previous state
+ * of workflows, jobs, and steps, and compares them with the current state to detect:
+ * <ul>
+ *   <li>Workflow state transitions (queued → in_progress → completed)</li>
+ *   <li>Job state transitions with timing information</li>
+ *   <li>Step state transitions with durations</li>
+ * </ul>
+ * </p>
+ *
+ * <h2>Detection Algorithm</h2>
+ * For each entity (workflow, job, step):
+ * <ol>
+ *   <li>Check if we've seen it before (exists in previous state)</li>
+ *   <li>If not seen before:
+ *     <ul>
+ *       <li>Generate event based on current status (queued, in_progress, completed)</li>
+ *     </ul>
+ *   </li>
+ *   <li>If seen before:
+ *     <ul>
+ *       <li>Compare previous status with current status</li>
+ *       <li>Generate event if status changed (e.g., queued → in_progress)</li>
+ *     </ul>
+ *   </li>
+ *   <li>Calculate duration for completed events (end time - start time)</li>
+ * </ol>
+ *
+ * <h2>State Management</h2>
+ * The detector maintains three maps to track previous state:
+ * <ul>
+ *   <li><b>previousWorkflowRuns</b>: Keyed by workflow run ID</li>
+ *   <li><b>previousJobs</b>: Keyed by job ID</li>
+ *   <li><b>previousSteps</b>: Keyed by "jobId:stepName" (composite key)</li>
+ * </ul>
+ *
+ * <h2>Memory Management</h2>
+ * To prevent unbounded memory growth, the detector implements automatic cleanup:
+ * <ul>
+ *   <li>Tracks when each entity was last seen</li>
+ *   <li>Removes entities not seen for more than 1 hour</li>
+ *   <li>Cleanup runs on every call to {@link #detectEvents}</li>
+ * </ul>
+ *
+ * <h2>Status Values</h2>
+ * GitHub workflows/jobs/steps can have these statuses:
+ * <ul>
+ *   <li><b>queued</b>: Waiting to start ({@link Constants#STATUS_QUEUED})</li>
+ *   <li><b>in_progress</b>: Currently running ({@link Constants#STATUS_IN_PROGRESS})</li>
+ *   <li><b>completed</b>: Finished ({@link Constants#STATUS_COMPLETED})</li>
+ * </ul>
+ *
+ * <h2>Conclusion Values</h2>
+ * For completed entities, conclusion indicates the outcome:
+ * <ul>
+ *   <li><b>success</b>: Completed successfully</li>
+ *   <li><b>failure</b>: Failed</li>
+ *   <li><b>cancelled</b>: Manually cancelled</li>
+ *   <li><b>skipped</b>: Skipped (e.g., due to conditions)</li>
+ * </ul>
+ *
+ * <h2>Thread Safety</h2>
+ * This class is NOT thread-safe. It should only be used from a single thread.
+ *
+ * <h2>Usage Example</h2>
+ * <pre>{@code
+ * EventDetector detector = new EventDetector("owner/repo");
+ *
+ * // First call - detects queued workflow
+ * List<WorkflowRun> runs1 = List.of(new WorkflowRun(..., status="queued"));
+ * List<MonitoringEvent> events1 = detector.detectEvents(runs1, Map.of());
+ * // events1 contains: WORKFLOW_QUEUED
+ *
+ * // Second call - detects workflow started
+ * List<WorkflowRun> runs2 = List.of(new WorkflowRun(..., status="in_progress"));
+ * List<MonitoringEvent> events2 = detector.detectEvents(runs2, Map.of());
+ * // events2 contains: WORKFLOW_STARTED
+ *
+ * // Third call - detects workflow completed
+ * List<WorkflowRun> runs3 = List.of(new WorkflowRun(..., status="completed"));
+ * List<MonitoringEvent> events3 = detector.detectEvents(runs3, Map.of());
+ * // events3 contains: WORKFLOW_COMPLETED
+ * }</pre>
+ *
+ * @see MonitoringEvent
+ * @see EventType
+ * @see WorkflowRun
+ * @see Job
+ * @see Step
+ * @since 1.0
  */
 public class EventDetector
 {

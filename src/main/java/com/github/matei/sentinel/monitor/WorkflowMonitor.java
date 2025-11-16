@@ -8,20 +8,93 @@ import com.github.matei.sentinel.model.MonitoringEvent;
 import com.github.matei.sentinel.model.WorkflowRun;
 import com.github.matei.sentinel.persistence.StateManager;
 import com.github.matei.sentinel.util.Constants;
+import com.github.matei.sentinel.util.Logger;
 
-import javax.management.relation.RoleUnresolved;
 import java.net.http.HttpTimeoutException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-
 /**
- * Main orchestrator for monitoring GitHub workflow runs.
- * Continuously polls GitHub API, detects events, and outputs them.
+ * Orchestrates the workflow monitoring process.
+ * <p>
+ * This class is the main coordinator that:
+ * <ol>
+ *   <li>Loads previous state from {@link StateManager}</li>
+ *   <li>Enters a polling loop that runs every {@link Constants#POLL_INTERVAL_SECONDS} seconds</li>
+ *   <li>Fetches workflow runs and jobs from {@link GitHubApiClient}</li>
+ *   <li>Detects new or changed events using {@link EventDetector}</li>
+ *   <li>Formats events using {@link EventFormatter} and outputs to stdout</li>
+ *   <li>Updates and persists state after each poll</li>
+ *   <li>Handles errors and retries gracefully</li>
+ *   <li>Supports graceful shutdown via {@link #stop()}</li>
+ * </ol>
+ * </p>
+ *
+ * <h2>Polling Strategy</h2>
+ * <ul>
+ *   <li><b>First Run</b>: Sets last check time to current time, so only NEW events are reported</li>
+ *   <li><b>Subsequent Runs</b>: Fetches events since last check time, catching up on missed events</li>
+ *   <li><b>Interval</b>: Polls every 30 seconds (configurable via {@link Constants#POLL_INTERVAL_SECONDS})</li>
+ * </ul>
+ *
+ * <h2>Error Handling</h2>
+ * The monitor handles various error scenarios without crashing:
+ * <ul>
+ *   <li><b>401 Unauthorized</b>: Invalid token - exits immediately with error message</li>
+ *   <li><b>403 Forbidden</b>: Rate limit or permissions - retries after delay</li>
+ *   <li><b>404 Not Found</b>: Repository not found - exits immediately with error message</li>
+ *   <li><b>Timeout</b>: Network timeout - retries after delay</li>
+ *   <li><b>Other errors</b>: Logs error and retries after delay</li>
+ * </ul>
+ *
+ * <h2>Graceful Shutdown</h2>
+ * The monitor supports graceful shutdown via:
+ * <ul>
+ *   <li>Calling {@link #stop()} from another thread</li>
+ *   <li>Interrupting the monitoring thread ({@link InterruptedException})</li>
+ *   <li>Shutdown hooks registered in {@link com.github.matei.sentinel.Main}</li>
+ * </ul>
+ *
+ * <h2>Performance Metrics</h2>
+ * The monitor tracks and displays:
+ * <ul>
+ *   <li>Total uptime</li>
+ *   <li>Total number of API polls</li>
+ *   <li>Total events reported</li>
+ * </ul>
+ *
+ * <h2>Thread Safety</h2>
+ * This class is designed for single-threaded use. The {@code running} flag is
+ * {@code volatile} to support stopping from a shutdown hook.
+ *
+ * <h2>Usage Example</h2>
+ * <pre>{@code
+ * Configuration config = new Configuration("owner/repo", "ghp_token");
+ * GitHubApiClient apiClient = new GitHubApiClientImpl("ghp_token");
+ * StateManager stateManager = new FileStateManager();
+ * EventDetector detector = new EventDetector("owner/repo");
+ * EventFormatter formatter = new ConsoleEventFormatter();
+ *
+ * WorkflowMonitor monitor = new WorkflowMonitor(
+ *     apiClient, stateManager, detector, formatter, config
+ * );
+ *
+ * // Register shutdown hook
+ * Runtime.getRuntime().addShutdownHook(new Thread(monitor::stop));
+ *
+ * // Start monitoring (blocks until stopped)
+ * monitor.start();
+ * }</pre>
+ *
+ * @see EventDetector
+ * @see GitHubApiClient
+ * @see StateManager
+ * @see EventFormatter
+ * @since 1.0
  */
-
 public class WorkflowMonitor
 {
     private final GitHubApiClient apiClient;
@@ -32,6 +105,20 @@ public class WorkflowMonitor
 
     private volatile boolean running = true;
 
+    // Performance metrics
+    private long totalPollCount = 0;
+    private long totalEventsReported = 0;
+    private Instant monitoringStartTime;
+
+    /**
+     * Creates a new WorkflowMonitor.
+     *
+     * @param apiClient client for fetching workflow data from GitHub
+     * @param stateManager manager for persisting state between runs
+     * @param eventDetector detector for identifying new/changed events
+     * @param eventFormatter formatter for outputting events
+     * @param config application configuration
+     */
     public WorkflowMonitor(GitHubApiClient apiClient, StateManager stateManager,
                            EventDetector eventDetector, EventFormatter eventFormatter, Configuration config)
     {
@@ -48,21 +135,24 @@ public class WorkflowMonitor
      */
     public void start()
     {
-        System.err.println("Starting monitoring for repository: " + config.getRepository());
-        System.err.println("Press CTRL+C to stop.");
+        monitoringStartTime = Instant.now();
+
+        Logger.info("Starting monitoring for repository: " + config.getRepository());
+        Logger.info("Press CTRL+C to stop.");
         System.err.println();
 
         Optional<Instant> lastCheckTime = stateManager.getLastCheckTime(config.getRepository());
 
         if (lastCheckTime.isEmpty())
         {
-            System.err.println("First run detected. Will only report events from now onwards");
+            Logger.info("First run detected. Will only report events from now onwards");
             // Set initial timestamp to NOW so we only report future events
             stateManager.updateLastCheckTime(config.getRepository(), Instant.now());
             stateManager.save();
-        } else
+        }
+        else
         {
-            System.err.println("Previous run detected. Catching up on events since: " + lastCheckTime.get());
+            Logger.info("Previous run detected. Catching up on events since: " + lastCheckTime.get());
         }
 
         System.err.println();
@@ -71,71 +161,106 @@ public class WorkflowMonitor
         {
             try
             {
-                pollAndProcessEvents();
+                totalPollCount++;
+                int eventCount = pollAndProcessEvents();
+                totalEventsReported += eventCount;
 
                 // Sleep for polling interval
-                Thread.sleep(Constants.POLL_INTERVAL_SECONDS * 1000);
-            } catch (InterruptedException e)
+                Thread.sleep(Constants.POLL_INTERVAL_SECONDS * 1000L);  // ✅ Added 'L' for long literal
+            }
+            catch (InterruptedException e)
             {
-                System.err.println("Monitoring interrupted. Shutting down...");
+                Logger.warn("Monitoring interrupted. Shutting down...");
                 break;
-            } catch (HttpTimeoutException e)
+            }
+            catch (HttpTimeoutException e)
             {
-                System.err.println("Warning: Request timed out. GitHub API might be slow. Retrying in " +
+                Logger.warn("Request timed out. GitHub API might be slow. Retrying in " +
                         Constants.POLL_INTERVAL_SECONDS + " seconds...");
-                // Continue monitoring despite errors
+                // Continue monitoring despite timeout
                 try
                 {
-                    Thread.sleep(Constants.POLL_INTERVAL_SECONDS * 1000);
-                } catch (InterruptedException ie)
+                    Thread.sleep(Constants.POLL_INTERVAL_SECONDS * 1000L);
+                }
+                catch (InterruptedException ie)
                 {
                     break;
                 }
             }
             catch (RuntimeException e)
             {
-                // Check for specific HTTP Errors
-                if (e.getMessage().contains("401"))
+                String message = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
+
+                if (message.contains("401") || message.contains("unauthorized"))
                 {
-                    System.err.println("Error: Invalid or expired Github token. Please check your token.");
+                    Logger.error("Authentication failed: Invalid or expired GitHub token.");
+                    Logger.error("   → Generate a new token at: https://github.com/settings/tokens");
+                    Logger.error("   → Required scope: 'repo' (Full control of private repositories)");
                     break;
                 }
-                else if (e.getMessage().contains("403"))
+                else if (message.contains("403") || message.contains("forbidden"))
                 {
-                    System.err.println("Warning: GitHub API rate limit reached. Waiting " +
-                            Constants.POLL_INTERVAL_SECONDS + " seconds...");
+                    if (message.contains("rate limit"))
+                    {
+                        Logger.error("GitHub API rate limit exceeded.");
+                        Logger.error("   → You have 5000 requests/hour with authentication.");
+                        Logger.error("   → Retrying in " + Constants.POLL_INTERVAL_SECONDS + " seconds...");
+                    }
+                    else
+                    {
+                        Logger.warn("Access forbidden: Check token permissions for this repository.");
+                    }
+
+                    // Continue monitoring (retry after delay)
+                    try
+                    {
+                        Thread.sleep(Constants.POLL_INTERVAL_SECONDS * 1000L);
+                    }
+                    catch (InterruptedException ie)
+                    {
+                        break;
+                    }
                 }
-                else if (e.getMessage().contains("404"))
+                else if (message.contains("404") || message.contains("not found"))
                 {
-                    System.err.println("Error: Repository not found or not accessible. Check repository name and token permissions.");
+                    Logger.error("Repository '" + config.getRepository() + "' not found or not accessible.");
+                    Logger.error("   → Verify the repository name format: owner/repo");
+                    Logger.error("   → For private repos, ensure your token has 'repo' scope");
                     break;
                 }
                 else
                 {
-                    System.err.println("Error during monitoring: " + e.getMessage());
-                }
-                try
-                {
-                    Thread.sleep(Constants.POLL_INTERVAL_SECONDS * 1000);
-                } catch (InterruptedException ie)
-                {
-                    break;
+                    Logger.warn("Unexpected error: " + e.getMessage());
+                    Logger.warn("   → Retrying in " + Constants.POLL_INTERVAL_SECONDS + " seconds...");
+
+                    // Continue monitoring (retry after delay)
+                    try
+                    {
+                        Thread.sleep(Constants.POLL_INTERVAL_SECONDS * 1000L);
+                    }
+                    catch (InterruptedException ie)
+                    {
+                        break;
+                    }
                 }
             }
             catch (Exception e)
             {
-                System.err.println("Unexpected error: " + e.getMessage());
+                Logger.error("Unexpected error: " + e.getMessage());
                 e.printStackTrace();
                 try
                 {
-                    Thread.sleep(Constants.POLL_INTERVAL_SECONDS * 1000);
-                } catch (InterruptedException ie)
+                    Thread.sleep(Constants.POLL_INTERVAL_SECONDS * 1000L);
+                }
+                catch (InterruptedException ie)
                 {
                     break;
                 }
             }
         }
-        System.err.println("Monitoring stopped.");
+
+        Logger.info("Monitoring stopped.");
+        printSummary();
     }
 
     /**
@@ -147,13 +272,75 @@ public class WorkflowMonitor
         running = false;
     }
 
+    // ====== HELPER METHODS ======
+
+    /**
+     * Prints a summary of monitoring statistics.
+     * Displays total runtime, number of polls, and events reported.
+     */
+    private void printSummary()
+    {
+        Duration uptime = Duration.between(monitoringStartTime, Instant.now());
+        System.err.println();
+        System.err.println("=== Monitoring Summary ===");
+        System.err.println("Total runtime: " + formatDuration(uptime));
+        System.err.println("Total polls: " + totalPollCount);
+        System.err.println("Events reported: " + totalEventsReported);
+        System.err.println("==========================");
+    }
+
+    /**
+     * Formats a duration into a human-readable string.
+     * <p>
+     * Examples:
+     * <ul>
+     *   <li>90 seconds → "1m 30s"</li>
+     *   <li>3661 seconds → "1h 1m 1s"</li>
+     *   <li>45 seconds → "45s"</li>
+     * </ul>
+     * </p>
+     *
+     * @param duration the duration to format
+     * @return formatted string (e.g., "1h 5m 30s")
+     */
+    private String formatDuration(Duration duration)
+    {
+        long hours = duration.toHours();
+        long minutes = duration.toMinutesPart();
+        long seconds = duration.toSecondsPart();
+
+        StringBuilder sb = new StringBuilder();
+
+        if (hours > 0)
+        {
+            sb.append(hours).append("h ");
+        }
+        if (minutes > 0)
+        {
+            sb.append(minutes).append("m ");
+        }
+        if (seconds > 0 || sb.isEmpty())  // Always show seconds if duration is 0
+        {
+            sb.append(seconds).append("s");
+        }
+
+        return sb.toString().trim();
+    }
+
     /**
      * Single poll cycle: fetch workflows, detect events, output them.
+     *
+     * @return number of new events detected and reported
+     * @throws Exception if API call fails
      */
-    private void pollAndProcessEvents() throws Exception {
+    private int pollAndProcessEvents() throws Exception
+    {
         // Get last check time
         Optional<Instant> lastCheckTime = stateManager.getLastCheckTime(config.getRepository());
         Instant since = lastCheckTime.orElse(Instant.now());
+
+        int eventCount = 0;
+        boolean stateChanged = false;
 
         // Fetch workflow runs since last check
         List<WorkflowRun> workflowRuns = apiClient.getWorkflowRuns(
@@ -165,7 +352,8 @@ public class WorkflowMonitor
         Map<Long, List<Job>> jobsMap = new HashMap<>();
 
         // For each workflow run, fetch its jobs
-        for (WorkflowRun run : workflowRuns) {
+        for (WorkflowRun run : workflowRuns)
+        {
             List<Job> jobs = apiClient.getJobsForRun(
                     config.getOwner(),
                     config.getRepo(),
@@ -175,12 +363,13 @@ public class WorkflowMonitor
             jobsMap.put(run.getId(), jobs);
         }
 
+        // Detect events by comparing current state with previous state
         List<MonitoringEvent> events = eventDetector.detectEvents(
                 workflowRuns,
                 jobsMap
         );
 
-        // Output each event
+        // Output each new event
         for (MonitoringEvent event : events)
         {
             // Check if we've already processed this event
@@ -192,28 +381,48 @@ public class WorkflowMonitor
 
                 // Mark as processed
                 stateManager.addProcessedEventId(config.getRepository(), eventId);
+                stateChanged = true;
+                eventCount++;
             }
         }
 
-        // Update last check time to now
-        stateManager.updateLastCheckTime(config.getRepository(), Instant.now());
-        stateManager.save();
+        // Save state if anything changed
+        if (stateChanged || events.isEmpty())
+        {
+            // Update last check time to now
+            stateManager.updateLastCheckTime(config.getRepository(), Instant.now());
+            stateManager.save();
+        }
+
+        return eventCount;
     }
 
     /**
      * Generates a unique ID for an event to prevent duplicates.
-     * Format: eventType_runId_jobId_stepName_timestamp
+     * <p>
+     * Format: {@code eventType_workflowName_jobName_stepName_timestamp}
+     * </p>
+     * <p>
+     * Non-alphanumeric characters in names are replaced with underscores
+     * to ensure the ID is filesystem-safe.
+     * </p>
+     *
+     * @param event the monitoring event
+     * @return unique event identifier string
      */
-    private String generateEventId(MonitoringEvent event) {
+    private String generateEventId(MonitoringEvent event)
+    {
         StringBuilder id = new StringBuilder();
         id.append(event.getType()).append("_");
         id.append(event.getWorkflowName().replaceAll("[^a-zA-Z0-9]", "_")).append("_");
 
-        if (event.getJobName() != null) {
+        if (event.getJobName() != null)
+        {
             id.append(event.getJobName().replaceAll("[^a-zA-Z0-9]", "_")).append("_");
         }
 
-        if (event.getStepName() != null) {
+        if (event.getStepName() != null)
+        {
             id.append(event.getStepName().replaceAll("[^a-zA-Z0-9]", "_")).append("_");
         }
 
@@ -221,5 +430,4 @@ public class WorkflowMonitor
 
         return id.toString();
     }
-
 }
