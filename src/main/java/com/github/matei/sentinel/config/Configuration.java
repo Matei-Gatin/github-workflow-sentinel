@@ -1,5 +1,6 @@
 package com.github.matei.sentinel.config;
 
+import com.github.matei.sentinel.util.Constants;
 import lombok.Getter;
 
 /**
@@ -19,15 +20,26 @@ public class Configuration
 
     public Configuration(String repository, String token)
     {
-        if (repository == null || !repository.contains("/"))
+        if (repository == null || !repository.contains(Constants.REPO_FORMAT_SEPARATOR))
         {
             throw new IllegalArgumentException("Repository must be in format 'owner/repo'");
         }
 
+        String[] parts = repository.split(Constants.REPO_FORMAT_SEPARATOR);
+
+        if (parts.length != Constants.REPO_FORMAT_PARTS)
+        {
+            throw new IllegalArgumentException("Repository must be in format 'owner/repo' (found " + parts.length +
+                    " parts)");
+        }
+
+        if (parts[0].trim().isEmpty() || parts[1].trim().isEmpty())
+        {
+            throw new IllegalArgumentException("Repository owner and name cannot be empty");
+        }
+
         this.repository = repository;
         this.token = token;
-
-        String[] parts = repository.split("/");
         this.owner = parts[0];
         this.repo = parts[1];
     }

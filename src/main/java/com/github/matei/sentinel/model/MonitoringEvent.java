@@ -1,5 +1,7 @@
 package com.github.matei.sentinel.model;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
 import lombok.Getter;
 import lombok.ToString;
 
@@ -12,6 +14,7 @@ import java.util.Objects;
  * This is a "normalized" event that combines data from WorkflowRun, Job, and Step.
  */
 
+@AllArgsConstructor
 @Getter
 @ToString
 public class MonitoringEvent /* What we print to console */
@@ -31,21 +34,6 @@ public class MonitoringEvent /* What we print to console */
     private final String conclusion;
     private final Duration duration;
 
-    public MonitoringEvent(EventType type, Instant timestamp, String repository, String branch,
-                           String sha, String workflowName, String jobName, String stepName,
-                           String conclusion, Duration duration)
-    {
-        this.type = type;
-        this.timestamp = timestamp;
-        this.repository = repository;
-        this.branch = branch;
-        this.sha = sha;
-        this.workflowName = workflowName;
-        this.jobName = jobName;
-        this.stepName = stepName;
-        this.conclusion = conclusion;
-        this.duration = duration;
-    }
 
     @Override
     public boolean equals(Object o)

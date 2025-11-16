@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 
+import com.github.matei.sentinel.util.Constants;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -19,7 +20,7 @@ import java.util.*;
  */
 public class FileStateManager implements StateManager
 {
-    private static final String STATE_FILE = ".sentinel-state.json";
+
 
     private final Gson gson;
     private final Map<String, RepositoryState> stateMap;
@@ -69,15 +70,27 @@ public class FileStateManager implements StateManager
         RepositoryState state = stateMap.computeIfAbsent(repository, k -> new RepositoryState());
         if (state.processedEventId == null)
         {
-            state.processedEventId = new HashSet<>();
+            state.processedEventId = new LinkedHashSet<>();
         }
         state.processedEventId.add(eventId);
+
+        // If we exceed the limit, remove the oldest entries
+        if (state.processedEventId.size() > Constants.MAX_EVENT_IDS)
+        {
+            Iterator<String> iterator = state.processedEventId.iterator();
+            int toRemove = state.processedEventId.size() - Constants.MAX_EVENT_IDS;
+            for (int i = 0; i < toRemove && iterator.hasNext(); i++)
+            {
+                iterator.next();
+                iterator.remove();
+            }
+        }
     }
 
     @Override
     public void save()
     {
-        try (FileWriter writer = new FileWriter(STATE_FILE))
+        try (FileWriter writer = new FileWriter(Constants.STATE_FILE))
         {
             gson.toJson(stateMap, writer);
         } catch (IOException e)
@@ -91,7 +104,7 @@ public class FileStateManager implements StateManager
      */
     private void loadState()
     {
-        Path path = Path.of(STATE_FILE);
+        Path path = Path.of(Constants.STATE_FILE);
         if (!Files.exists(path))
         {
             return;

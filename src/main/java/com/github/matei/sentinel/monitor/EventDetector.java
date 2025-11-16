@@ -1,6 +1,7 @@
 package com.github.matei.sentinel.monitor;
 
 import com.github.matei.sentinel.model.*;
+import com.github.matei.sentinel.util.Constants;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -19,7 +20,12 @@ public class EventDetector
     private final Map<Long, WorkflowRun> previousWorkflowRuns = new HashMap<>();
     private final Map<Long, Job> previousJobs = new HashMap<>();
     private final Map<String, Step> previousSteps = new HashMap<>(); // jobId + stepName
-    
+
+    // Track when we last saw each item to clean up old entries
+    private final Map<Long, Instant> workflowLastSeen = new HashMap<>();
+    private final Map<Long, Instant> jobLastSeen = new HashMap<>();
+    private final Map<String, Instant> stepLastSeen = new HashMap<>();
+
     public EventDetector(String repository)
     {
         this.repository = repository;
@@ -38,7 +44,8 @@ public class EventDetector
     {
         
         List<MonitoringEvent> events = new ArrayList<>();
-        
+        Instant now = Instant.now();
+
         for (WorkflowRun currentRun : currentWorkflowRuns)
         {
             WorkflowRun previousRun = previousWorkflowRuns.get(currentRun.getId());
@@ -52,9 +59,51 @@ public class EventDetector
             
             // Update previous state
             previousWorkflowRuns.put(currentRun.getId(), currentRun);
+
+            workflowLastSeen.put(currentRun.getId(), now);
         }
-        
+
+        // Clean up here to prevent memory leak
+        cleanupOldEntries(now);
+
         return events;
+    }
+
+    /**
+     * Removes entries older than CLEANUP_THRESHOLD to prevent unbounded memory growth.
+     */
+    private void cleanupOldEntries(Instant now)
+    {
+        workflowLastSeen.entrySet().removeIf(entry ->
+                {
+                        if (Duration.between(entry.getValue(), now).compareTo(Constants.CLEANUP_THRESHOLD) > 0)
+                        {
+                            previousWorkflowRuns.remove(entry.getKey());
+                            return true;
+                        }
+                        return false;
+                }
+        );
+
+        // Remove old jobs
+        jobLastSeen.entrySet().removeIf(entry -> {
+            if (Duration.between(entry.getValue(), now).compareTo(Constants.CLEANUP_THRESHOLD) > 0)
+            {
+                previousJobs.remove(entry.getKey());
+                return true;
+            }
+            return false;
+        });
+
+        // Remove old steps
+        stepLastSeen.entrySet().removeIf(entry -> {
+            if (Duration.between(entry.getValue(), now).compareTo(Constants.CLEANUP_THRESHOLD)  > 0)
+            {
+                previousSteps.remove(entry.getKey());
+                return true;
+            }
+            return false;
+        });
     }
     
     /**
@@ -68,7 +117,7 @@ public class EventDetector
         if (previousRun == null)
         {
             // If status is "queued", report WORKFLOW_QUEUED
-            if ("queued".equals(currentRun.getStatus()))
+            if (Constants.STATUS_QUEUED.equals(currentRun.getStatus()))
             {
                 events.add(new MonitoringEvent(
                     EventType.WORKFLOW_QUEUED,
@@ -85,7 +134,7 @@ public class EventDetector
             }
             
             // If status is "in_progress", report WORKFLOW_STARTED
-            if ("in_progress".equals(currentRun.getStatus()))
+            if (Constants.STATUS_IN_PROGRESS.equals(currentRun.getStatus()))
             {
                 events.add(new MonitoringEvent(
                     EventType.WORKFLOW_STARTED,
@@ -102,7 +151,8 @@ public class EventDetector
             }
             
             // If already completed when we first see it, report WORKFLOW_COMPLETED
-            if ("completed".equals(currentRun.getStatus()) && currentRun.getConcludedAt() != null)
+            if (Constants.STATUS_COMPLETED.equals(currentRun.getStatus())
+                    && currentRun.getConcludedAt() != null)
             {
                 events.add(new MonitoringEvent(
                     EventType.WORKFLOW_COMPLETED,
@@ -121,7 +171,8 @@ public class EventDetector
         {
             // Workflow state changed
             // Check if status changed from "queued" to "in_progress"
-            if ("queued".equals(previousRun.getStatus()) && "in_progress".equals(currentRun.getStatus()))
+            if (Constants.STATUS_QUEUED.equals(previousRun.getStatus())
+                    && Constants.STATUS_IN_PROGRESS.equals(currentRun.getStatus()))
             {
                 events.add(new MonitoringEvent(
                     EventType.WORKFLOW_STARTED,
@@ -138,7 +189,8 @@ public class EventDetector
             }
             
             // Check if workflow completed
-            if (!"completed".equals(previousRun.getStatus()) && "completed".equals(currentRun.getStatus()))
+            if (!Constants.STATUS_COMPLETED.equals(previousRun.getStatus())
+                    && Constants.STATUS_COMPLETED.equals(currentRun.getStatus()))
             {
                 events.add(new MonitoringEvent(
                     EventType.WORKFLOW_COMPLETED,
@@ -164,7 +216,8 @@ public class EventDetector
     private List<MonitoringEvent> detectJobEvents(WorkflowRun workflowRun, List<Job> currentJobs)
     {
         List<MonitoringEvent> events = new ArrayList<>();
-        
+        Instant now = Instant.now();
+
         for (Job currentJob : currentJobs)
         {
             Job previousJob = previousJobs.get(currentJob.getId());
@@ -173,7 +226,7 @@ public class EventDetector
             if (previousJob == null)
             {
                 // Job queued
-                if ("queued".equals(currentJob.getStatus()))
+                if (Constants.STATUS_QUEUED.equals(currentJob.getStatus()))
                 {
                     events.add(new MonitoringEvent(
                         EventType.JOB_QUEUED,
@@ -190,7 +243,8 @@ public class EventDetector
                 }
                 
                 // Job started
-                if ("in_progress".equals(currentJob.getStatus()) && currentJob.getStartedAt() != null)
+                if (Constants.STATUS_IN_PROGRESS.equals(currentJob.getStatus())
+                        && currentJob.getStartedAt() != null)
                 {
                     events.add(new MonitoringEvent(
                         EventType.JOB_STARTED,
@@ -207,7 +261,8 @@ public class EventDetector
                 }
                 
                 // Job already completed
-                if ("completed".equals(currentJob.getStatus()) && currentJob.getCompletedAt() != null)
+                if (Constants.STATUS_COMPLETED.equals(currentJob.getStatus())
+                        && currentJob.getCompletedAt() != null)
                 {
                     Duration duration = null;
                     if (currentJob.getStartedAt() != null && currentJob.getCompletedAt() != null)
@@ -232,7 +287,8 @@ public class EventDetector
             {
                 // Job state changed
                 // Check if job started (queued -> in_progress)
-                if ("queued".equals(previousJob.getStatus()) && "in_progress".equals(currentJob.getStatus()))
+                if (Constants.STATUS_QUEUED.equals(previousJob.getStatus())
+                        && Constants.STATUS_IN_PROGRESS.equals(currentJob.getStatus()))
                 {
                     events.add(new MonitoringEvent(
                         EventType.JOB_STARTED,
@@ -249,7 +305,8 @@ public class EventDetector
                 }
                 
                 // Check if job completed
-                if (!"completed".equals(previousJob.getStatus()) && "completed".equals(currentJob.getStatus()))
+                if (!Constants.STATUS_COMPLETED.equals(previousJob.getStatus())
+                        && Constants.STATUS_COMPLETED.equals(currentJob.getStatus()))
                 {
                     Duration duration = null;
                     if (currentJob.getStartedAt() != null && currentJob.getCompletedAt() != null)
@@ -274,7 +331,9 @@ public class EventDetector
             
             // Detect step-level events (if job has steps)
             events.addAll(detectStepEvents(workflowRun, currentJob));
-            
+
+            jobLastSeen.put(currentJob.getId(), now);
+
             // Update previous state
             previousJobs.put(currentJob.getId(), currentJob);
         }
@@ -289,12 +348,8 @@ public class EventDetector
     private List<MonitoringEvent> detectStepEvents(WorkflowRun workflowRun, Job job)
     {
         List<MonitoringEvent> events = new ArrayList<>();
-        
-        // Note: In the real implementation, you'll get steps from the Job object
-        // For now, we'll assume Job has a getSteps() method
-        // This is a placeholder - you'll need to add steps to Job model
-        // and parse them from the GitHub API response
-        
+        Instant now = Instant.now();
+
         List<Step> currentSteps = job.getSteps();
         if (currentSteps == null)
         {
@@ -309,7 +364,8 @@ public class EventDetector
             if (previousStep == null)
             {
                 // New step started
-                if ("in_progress".equals(currentStep.getStatus()) && currentStep.getStartedAt() != null)
+                if (Constants.STATUS_IN_PROGRESS.equals(currentStep.getStatus())
+                        && currentStep.getStartedAt() != null)
                 {
                     events.add(new MonitoringEvent(
                         EventType.STEP_STARTED,
@@ -326,10 +382,12 @@ public class EventDetector
                 }
                 
                 // Step already completed
-                if ("completed".equals(currentStep.getStatus()) && currentStep.getCompletedAt() != null)
+                if (Constants.STATUS_COMPLETED.equals(currentStep.getStatus())
+                        && currentStep.getCompletedAt() != null)
                 {
                     Duration duration = null;
-                    if (currentStep.getStartedAt() != null && currentStep.getCompletedAt() != null) {
+                    if (currentStep.getStartedAt() != null && currentStep.getCompletedAt() != null)
+                    {
                         duration = Duration.between(currentStep.getStartedAt(), currentStep.getCompletedAt());
                     }
                     
@@ -349,7 +407,8 @@ public class EventDetector
             } else
             {
                 // Step state changed
-                if (!"completed".equals(previousStep.getStatus()) && "completed".equals(currentStep.getStatus()))
+                if (!Constants.STATUS_COMPLETED.equals(previousStep.getStatus())
+                        && Constants.STATUS_COMPLETED.equals(currentStep.getStatus()))
                 {
                     Duration duration = null;
                     if (currentStep.getStartedAt() != null && currentStep.getCompletedAt() != null)
@@ -374,6 +433,8 @@ public class EventDetector
             
             // Update previous state
             previousSteps.put(stepKey, currentStep);
+
+            stepLastSeen.put(stepKey, now);
         }
         
         return events;

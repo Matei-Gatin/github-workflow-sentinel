@@ -31,7 +31,7 @@ dependency-reduced-pom.xml
 # VS Code
 .vscode/
 .github/prompts
-./project_description.txt
+project_description.md
 
 # Eclipse
 .classpath
@@ -48,8 +48,11 @@ data/
 
 # Logs
 logs/
-*.log
 
-# Personal tokens (IMPORTANT!)
+# Personal tokens
 .env
 *.token
+
+# State file
+.sentinel-state.json
+.sentinel-state-test.json

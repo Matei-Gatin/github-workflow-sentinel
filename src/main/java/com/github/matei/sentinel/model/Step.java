@@ -1,5 +1,7 @@
 package com.github.matei.sentinel.model;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
 import lombok.Getter;
 import lombok.ToString;
 
@@ -11,6 +13,7 @@ import java.util.Objects;
  * Steps are the individual tasks that run within a job (e.g., "Checkout code", "Run tests", "Build").
  */
 
+@AllArgsConstructor
 @Getter
 @ToString
 public class Step
@@ -20,15 +23,6 @@ public class Step
     private final String conclusion;
     private final Instant startedAt;
     private final Instant completedAt;
-
-    public Step(String name, String status, String conclusion, Instant startedAt, Instant completedAt)
-    {
-        this.name = name;
-        this.status = status;
-        this.conclusion = conclusion;
-        this.startedAt = startedAt;
-        this.completedAt = completedAt;
-    }
 
     // Two steps are equal if they have the same name
     @Override

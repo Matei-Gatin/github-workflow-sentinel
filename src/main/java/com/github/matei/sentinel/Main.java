@@ -10,10 +10,11 @@ import com.github.matei.sentinel.monitor.EventDetector;
 import com.github.matei.sentinel.monitor.WorkflowMonitor;
 import com.github.matei.sentinel.persistence.FileStateManager;
 import com.github.matei.sentinel.persistence.StateManager;
+import com.github.matei.sentinel.util.Constants;
 
 public class Main {
     public static void main(String[] args) {
-        if (args.length < 4)
+        if (args.length < Constants.MIN_ARGS_COUNT)
         {
             printUsage();
             System.exit(1);
@@ -25,11 +26,13 @@ public class Main {
         // Parse arguments
         for (int i = 0; i < args.length; i++)
         {
-            if (("--repo".equals(args[i]) || "-r".equals(args[i])) && i + 1 < args.length)
+            if ((Constants.ARG_REPO_LONG.equals(args[i]) || Constants.ARG_REPO_SHORT.equals(args[i]))
+                    && i + 1 < args.length)
             {
                 repository = args[i + 1];
                 i++;
-            } else if (("--token".equals(args[i]) || "-t".equals(args[i])) && i + 1 < args.length)
+            } else if ((Constants.ARG_TOKEN_LONG.equals(args[i]) || Constants.ARG_TOKEN_SHORT.equals(args[i]))
+                    && i + 1 < args.length)
             {
                 token = args[i + 1];
                 i++;
@@ -37,18 +40,21 @@ public class Main {
         }
 
         // Validate arguments
-        if (repository == null || token == null) {
+        if (repository == null || token == null)
+        {
             System.err.println("Error: Both --repo and --token are required.");
             printUsage();
             System.exit(1);
         }
 
-        if (!repository.contains("/") || repository.split("/").length != 2) {
+        if (!repository.contains(Constants.REPO_FORMAT_SEPARATOR)
+                || repository.split(Constants.REPO_FORMAT_SEPARATOR).length != Constants.REPO_FORMAT_PARTS) {
             System.err.println("Error: Repository must be in format 'owner/repo'");
             System.exit(1);
         }
 
-        if (token.trim().isEmpty()) {
+        if (token.trim().isEmpty())
+        {
             System.err.println("Error: Token cannot be empty");
             System.exit(1);
         }
@@ -86,7 +92,8 @@ public class Main {
         }
     }
 
-    private static void printUsage() {
+    private static void printUsage()
+    {
         System.err.println("Usage: java -jar sentinel.jar --repo owner/repo --token ghp_xxxxx");
         System.err.println();
         System.err.println("Options:");

@@ -5,6 +5,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
 import lombok.Getter;
 import lombok.ToString;
 
@@ -40,7 +42,7 @@ public class Job
         this.conclusion = conclusion;
         this.startedAt = startedAt;
         this.completedAt = completedAt;
-        this.steps = steps != null ? steps : Collections.emptyList();
+        this.steps = steps != null ? List.copyOf(steps) : Collections.emptyList();
     }
 
     @Override

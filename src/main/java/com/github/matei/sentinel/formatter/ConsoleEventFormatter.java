@@ -1,6 +1,7 @@
 package com.github.matei.sentinel.formatter;
 
 import com.github.matei.sentinel.model.MonitoringEvent;
+import com.github.matei.sentinel.util.Constants;
 
 import java.time.Duration;
 import java.time.format.DateTimeFormatter;
@@ -14,14 +15,13 @@ import java.time.format.DateTimeFormatter;
 
 public class ConsoleEventFormatter implements EventFormatter
 {
-    private static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ISO_INSTANT;
 
     @Override
     public String format(MonitoringEvent event) {
         StringBuilder sb = new StringBuilder();
 
         // [TIMESTAMP]
-        sb.append("[").append(TIMESTAMP_FORMATTER.format(event.getTimestamp())).append("]");
+        sb.append("[").append(Constants.TIMESTAMP_FORMATTER.format(event.getTimestamp())).append("]");
 
         // [EVENT_TYPE]
         sb.append("[").append(event.getType()).append("] ");
@@ -44,7 +44,7 @@ public class ConsoleEventFormatter implements EventFormatter
         // sha:abc123
         if (event.getSha() != null)
         {
-            sb.append("sha:").append(event.getSha(), 0, Math.min(7, event.getSha().length())).append(" ");
+            sb.append("sha:").append(event.getSha(), 0, Math.min(Constants.SHA_DISPLAY_LENGTH, event.getSha().length())).append(" ");
         }
 
         // workflow:"CI Pipeline"
@@ -59,8 +59,14 @@ public class ConsoleEventFormatter implements EventFormatter
             sb.append("job:").append(event.getJobName()).append(" ");
         }
 
-        // step:compile
+        // step
         if (event.getStepName() != null)
+        {
+            sb.append("step:").append(event.getStepName()).append(" ");
+        }
+
+        // duration
+        if (event.getDuration() != null)
         {
             sb.append("- Duration: ").append(formatDuration(event.getDuration()));
         }
@@ -78,8 +84,8 @@ public class ConsoleEventFormatter implements EventFormatter
     private String formatDuration(Duration duration)
     {
         long hours = duration.toHours();
-        long minutes = duration.toMinutes();
-        long seconds = duration.toSeconds();
+        long minutes = duration.toMinutesPart();
+        long seconds = duration.toSecondsPart();
 
         StringBuilder result = new StringBuilder();
 

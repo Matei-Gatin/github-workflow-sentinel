@@ -1,6 +1,5 @@
 package com.github.matei.sentinel.monitor;
 
-
 import com.github.matei.sentinel.client.GitHubApiClient;
 import com.github.matei.sentinel.config.Configuration;
 import com.github.matei.sentinel.formatter.EventFormatter;
@@ -8,7 +7,10 @@ import com.github.matei.sentinel.model.Job;
 import com.github.matei.sentinel.model.MonitoringEvent;
 import com.github.matei.sentinel.model.WorkflowRun;
 import com.github.matei.sentinel.persistence.StateManager;
+import com.github.matei.sentinel.util.Constants;
 
+import javax.management.relation.RoleUnresolved;
+import java.net.http.HttpTimeoutException;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
@@ -22,8 +24,6 @@ import java.util.Optional;
 
 public class WorkflowMonitor
 {
-    private static final int POLL_INTERVAL_SECONDS = 30;
-
     private final GitHubApiClient apiClient;
     private final StateManager stateManager;
     private final EventDetector eventDetector;
@@ -73,26 +73,68 @@ public class WorkflowMonitor
             {
                 pollAndProcessEvents();
 
-                // sleep 30 seconds
-                Thread.sleep(POLL_INTERVAL_SECONDS * 1000);
+                // Sleep for polling interval
+                Thread.sleep(Constants.POLL_INTERVAL_SECONDS * 1000);
             } catch (InterruptedException e)
             {
                 System.err.println("Monitoring interrupted. Shutting down...");
                 break;
-            } catch (Exception e)
+            } catch (HttpTimeoutException e)
             {
-                System.err.println("Error during monitoring: " + e.getMessage());
+                System.err.println("Warning: Request timed out. GitHub API might be slow. Retrying in " +
+                        Constants.POLL_INTERVAL_SECONDS + " seconds...");
                 // Continue monitoring despite errors
                 try
                 {
-                    Thread.sleep(POLL_INTERVAL_SECONDS * 1000);
+                    Thread.sleep(Constants.POLL_INTERVAL_SECONDS * 1000);
+                } catch (InterruptedException ie)
+                {
+                    break;
+                }
+            }
+            catch (RuntimeException e)
+            {
+                // Check for specific HTTP Errors
+                if (e.getMessage().contains("401"))
+                {
+                    System.err.println("Error: Invalid or expired Github token. Please check your token.");
+                    break;
+                }
+                else if (e.getMessage().contains("403"))
+                {
+                    System.err.println("Warning: GitHub API rate limit reached. Waiting " +
+                            Constants.POLL_INTERVAL_SECONDS + " seconds...");
+                }
+                else if (e.getMessage().contains("404"))
+                {
+                    System.err.println("Error: Repository not found or not accessible. Check repository name and token permissions.");
+                    break;
+                }
+                else
+                {
+                    System.err.println("Error during monitoring: " + e.getMessage());
+                }
+                try
+                {
+                    Thread.sleep(Constants.POLL_INTERVAL_SECONDS * 1000);
+                } catch (InterruptedException ie)
+                {
+                    break;
+                }
+            }
+            catch (Exception e)
+            {
+                System.err.println("Unexpected error: " + e.getMessage());
+                e.printStackTrace();
+                try
+                {
+                    Thread.sleep(Constants.POLL_INTERVAL_SECONDS * 1000);
                 } catch (InterruptedException ie)
                 {
                     break;
                 }
             }
         }
-
         System.err.println("Monitoring stopped.");
     }
 
