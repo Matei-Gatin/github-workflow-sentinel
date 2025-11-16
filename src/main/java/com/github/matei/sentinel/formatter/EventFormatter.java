@@ -1,6 +1,6 @@
-package com.github.Matei.sentinel.formatter;
+package com.github.matei.sentinel.formatter;
 
-import com.github.Matei.sentinel.model.MonitoringEvent;
+import com.github.matei.sentinel.model.MonitoringEvent;
 
 /**
  * Strategy interface for formatting monitoring events.

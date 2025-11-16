@@ -1,14 +1,13 @@
-package com.github.Matei.sentinel.monitor;
+package com.github.matei.sentinel.monitor;
 
 
-import com.github.Matei.sentinel.client.GitHubApiClient;
-import com.github.Matei.sentinel.client.GitHubApiClientImpl;
-import com.github.Matei.sentinel.config.Configuration;
-import com.github.Matei.sentinel.formatter.EventFormatter;
-import com.github.Matei.sentinel.model.Job;
-import com.github.Matei.sentinel.model.MonitoringEvent;
-import com.github.Matei.sentinel.model.WorkflowRun;
-import com.github.Matei.sentinel.persistence.StateManager;
+import com.github.matei.sentinel.client.GitHubApiClient;
+import com.github.matei.sentinel.config.Configuration;
+import com.github.matei.sentinel.formatter.EventFormatter;
+import com.github.matei.sentinel.model.Job;
+import com.github.matei.sentinel.model.MonitoringEvent;
+import com.github.matei.sentinel.model.WorkflowRun;
+import com.github.matei.sentinel.persistence.StateManager;
 
 import java.time.Instant;
 import java.util.HashMap;

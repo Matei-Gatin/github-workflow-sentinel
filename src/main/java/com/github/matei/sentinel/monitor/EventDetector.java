@@ -1,6 +1,6 @@
-package com.github.Matei.sentinel.monitor;
+package com.github.matei.sentinel.monitor;
 
-import com.github.Matei.sentinel.model.*;
+import com.github.matei.sentinel.model.*;
 
 import java.time.Duration;
 import java.time.Instant;

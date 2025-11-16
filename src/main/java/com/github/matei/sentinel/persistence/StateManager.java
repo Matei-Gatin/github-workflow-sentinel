@@ -1,4 +1,4 @@
-package com.github.Matei.sentinel.persistence;
+package com.github.matei.sentinel.persistence;
 
 import java.time.Instant;
 import java.util.Optional;

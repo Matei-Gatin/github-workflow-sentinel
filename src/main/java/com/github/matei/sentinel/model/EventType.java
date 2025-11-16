@@ -1,4 +1,4 @@
-package com.github.Matei.sentinel.model;
+package com.github.matei.sentinel.model;
 
 /**
  * Types of events we can monitor and report.

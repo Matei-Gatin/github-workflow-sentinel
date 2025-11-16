@@ -1,0 +1,23 @@
+name: test.yml
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Run a test
+        run:
+          echo "Testing workflow monitoring"
+          sleep 10
+          echo "Test complete"
+
+      - name: Another step
+        run: |
+          echo "Second step running"
+          sleep 5
+          echo "Done!"

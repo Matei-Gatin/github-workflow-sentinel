@@ -30,7 +30,7 @@ dependency-reduced-pom.xml
 
 # VS Code
 .vscode/
-.github/
+.github/prompts
 ./project_description.txt
 
 # Eclipse

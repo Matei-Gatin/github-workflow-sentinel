@@ -1,4 +1,4 @@
-package com.github.Matei.sentinel.config;
+package com.github.matei.sentinel.config;
 
 import lombok.Getter;
 

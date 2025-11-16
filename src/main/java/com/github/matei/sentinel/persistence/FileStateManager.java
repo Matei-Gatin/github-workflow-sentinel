@@ -1,10 +1,9 @@
-package com.github.Matei.sentinel.persistence;
+package com.github.matei.sentinel.persistence;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 
-import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;

@@ -1,8 +1,8 @@
-package com.github.Matei.sentinel.client;
+package com.github.matei.sentinel.client;
 
-import com.github.Matei.sentinel.model.Job;
-import com.github.Matei.sentinel.model.Step;
-import com.github.Matei.sentinel.model.WorkflowRun;
+import com.github.matei.sentinel.model.Job;
+import com.github.matei.sentinel.model.Step;
+import com.github.matei.sentinel.model.WorkflowRun;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
