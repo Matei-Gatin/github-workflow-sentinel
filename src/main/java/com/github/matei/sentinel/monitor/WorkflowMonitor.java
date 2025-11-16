@@ -1,5 +1,13 @@
 package com.github.matei.sentinel.monitor;
 
+import java.net.http.HttpTimeoutException;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
 import com.github.matei.sentinel.client.GitHubApiClient;
 import com.github.matei.sentinel.config.Configuration;
 import com.github.matei.sentinel.formatter.EventFormatter;
@@ -9,14 +17,6 @@ import com.github.matei.sentinel.model.WorkflowRun;
 import com.github.matei.sentinel.persistence.StateManager;
 import com.github.matei.sentinel.util.Constants;
 import com.github.matei.sentinel.util.Logger;
-
-import java.net.http.HttpTimeoutException;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 /**
  * Orchestrates the workflow monitoring process.
  * <p>
@@ -170,7 +170,7 @@ public class WorkflowMonitor
             }
             catch (InterruptedException e)
             {
-                Logger.warn("Monitoring interrupted. Shutting down...");
+                // Interrupted by shutdown hook - exit gracefully without extra message
                 break;
             }
             catch (HttpTimeoutException e)

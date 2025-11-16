@@ -73,21 +73,29 @@ java -jar target/sentinel.jar --repo microsoft/vscode --token ghp_abc123def456
 The tool outputs one line per event with color-coded logging:
 
 ```text
-i Starting monitoring for repository: microsoft/vscode
-i Press CTRL+C to stop monitoring.
+i Starting monitoring for repository: Matei-Gatin/github-workflow-sentinel
+i Press CTRL+C to stop.
 
-[2025-11-15T10:30:00Z] [WORKFLOW_STARTED] repo:microsoft/vscode branch:main sha:abc123d workflow:"CI Pipeline"
-[2025-11-15T10:30:15Z] [JOB_STARTED] repo:microsoft/vscode branch:main sha:abc123d workflow:"CI Pipeline" job:build
-[2025-11-15T10:31:45Z] [STEP_COMPLETED] [SUCCESS] repo:microsoft/vscode branch:main sha:abc123d workflow:"CI Pipeline" job:build step:"Compile" - Duration: 1m 30s
-[2025-11-15T10:32:00Z] [JOB_COMPLETED] [SUCCESS] repo:microsoft/vscode branch:main sha:abc123d workflow:"CI Pipeline" job:build - Duration: 2m 15s
+i Previous run detected. Catching up on events since: 2025-11-16T22:51:34.268091151Z
 
-i Shutting down monitoring...
-i ==================== MONITORING SUMMARY ====================
-i   Repository: microsoft/vscode
-i   Total Polls: 12
-i   Events Reported: 24
-i   Uptime: 5m 30s
-i ===========================================================
+[2025-11-16T22:54:30Z][WORKFLOW_QUEUED] repo:Matei-Gatin/github-workflow-sentinel branch:main sha:ef2a715 workflow:"test.yml"
+[2025-11-16T22:54:45Z][WORKFLOW_COMPLETED] [SUCCESS] repo:Matei-Gatin/github-workflow-sentinel branch:main sha:ef2a715 workflow:"test.yml"
+[2025-11-16T22:54:44Z][JOB_COMPLETED] [SUCCESS] repo:Matei-Gatin/github-workflow-sentinel branch:main sha:ef2a715 workflow:"test.yml" job:test - Duration: 9s
+[2025-11-16T22:54:36Z][STEP_COMPLETED] [SUCCESS] repo:Matei-Gatin/github-workflow-sentinel branch:main sha:ef2a715 workflow:"test.yml" job:test step:Set up job - Duration: 1s
+[2025-11-16T22:54:37Z][STEP_COMPLETED] [SUCCESS] repo:Matei-Gatin/github-workflow-sentinel branch:main sha:ef2a715 workflow:"test.yml" job:test step:Checkout code - Duration: 1s
+[2025-11-16T22:54:37Z][STEP_COMPLETED] [SUCCESS] repo:Matei-Gatin/github-workflow-sentinel branch:main sha:ef2a715 workflow:"test.yml" job:test step:Run a test - Duration: 0s
+[2025-11-16T22:54:42Z][STEP_COMPLETED] [SUCCESS] repo:Matei-Gatin/github-workflow-sentinel branch:main sha:ef2a715 workflow:"test.yml" job:test step:Another step - Duration: 5s
+[2025-11-16T22:54:42Z][STEP_COMPLETED] [SUCCESS] repo:Matei-Gatin/github-workflow-sentinel branch:main sha:ef2a715 workflow:"test.yml" job:test step:Post Checkout code - Duration: 0s
+[2025-11-16T22:54:42Z][STEP_COMPLETED] [SUCCESS] repo:Matei-Gatin/github-workflow-sentinel branch:main sha:ef2a715 workflow:"test.yml" job:test step:Complete job - Duration: 0s
+^C
+Shutting down gracefully...
+i Monitoring stopped.
+
+=== Monitoring Summary ===
+Total runtime: 4m 9s
+Total polls: 9
+Events reported: 9
+==========================
 ```
 
 ### Event Types

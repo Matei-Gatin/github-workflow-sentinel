@@ -11,6 +11,7 @@ import com.github.matei.sentinel.monitor.WorkflowMonitor;
 import com.github.matei.sentinel.persistence.FileStateManager;
 import com.github.matei.sentinel.persistence.StateManager;
 import com.github.matei.sentinel.util.Constants;
+import com.github.matei.sentinel.util.Logger;
 
 /**
  * Entry point of the program
@@ -45,20 +46,20 @@ public class Main {
         // Validate arguments
         if (repository == null || token == null)
         {
-            System.err.println("Error: Both --repo and --token are required.");
+            Logger.error("Error: Both --repo and --token are required.");
             printUsage();
             System.exit(1);
         }
 
         if (!repository.contains(Constants.REPO_FORMAT_SEPARATOR)
                 || repository.split(Constants.REPO_FORMAT_SEPARATOR).length != Constants.REPO_FORMAT_PARTS) {
-            System.err.println("Error: Repository must be in format 'owner/repo'");
+            Logger.error("Error: Repository must be in format 'owner/repo'");
             System.exit(1);
         }
 
         if (token.trim().isEmpty())
         {
-            System.err.println("Error: Token cannot be empty");
+            Logger.error("Error: Token cannot be empty");
             System.exit(1);
         }
 
@@ -79,17 +80,26 @@ public class Main {
                     cofig
             );
 
+            // Keep reference to main thread so shutdown hook can interrupt it
+            Thread mainThread = Thread.currentThread();
+
             // Register shutdown hook for graceful termination (CTRL+C handling)
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                System.err.println("\nShutting down gracefully...");
+                Logger.info("\nShutting down gracefully...");
                 monitor.stop();
+                mainThread.interrupt(); // Wake up the main thread if it's sleeping
+                try {
+                    mainThread.join(2000); // Wait up to 2 seconds for cleanup
+                } catch (InterruptedException e) {
+                    // Ignore
+                }
             }));
 
             // start monitoring
             monitor.start();
         } catch (Exception e)
         {
-            System.err.println("Fatal error: " + e.getMessage());
+            Logger.error("Fatal error: " + e.getMessage());
             e.printStackTrace();
             System.exit(1);
         }
@@ -97,13 +107,13 @@ public class Main {
 
     private static void printUsage()
     {
-        System.err.println("Usage: java -jar sentinel.jar --repo owner/repo --token ghp_xxxxx");
+        Logger.info("Usage: java -jar sentinel.jar --repo owner/repo --token ghp_xxxxx");
         System.err.println();
-        System.err.println("Options:");
-        System.err.println("  --repo, -r    Repository in format 'owner/repo' (required)");
-        System.err.println("  --token, -t   GitHub Personal Access Token (required)");
+        Logger.info("Options:");
+        Logger.info("  --repo, -r    Repository in format 'owner/repo' (required)");
+        Logger.info("  --token, -t   GitHub Personal Access Token (required)");
         System.err.println();
-        System.err.println("Example:");
-        System.err.println("  java -jar sentinel.jar --repo microsoft/vscode --token ghp_abc123");
+        Logger.info("Example:");
+        Logger.info("  java -jar sentinel.jar --repo microsoft/vscode --token ghp_abc123");
     }
 }
